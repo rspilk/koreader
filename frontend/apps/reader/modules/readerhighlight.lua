@@ -1919,12 +1919,6 @@ function ReaderHighlight:onHoldPan(_, ges)
 
     local old_text = self.selected_text and self.selected_text.text
     self.selected_text = self.ui.document:getTextFromPositions(self.hold_pos, self.holdpan_pos)
-    if self.selected_text and self.selected_text.sboxes and #self.selected_text.sboxes == 0 then
-        -- abort highlighting if crengine doesn't provide sboxes for current positions
-        -- may happen in TXT files with disabled txt_preformatted
-        self:clear()
-        return true
-    end
     self.is_word_selection = false
 
     if self.selected_text and self.selected_text.pos0 then
@@ -2522,7 +2516,7 @@ function ReaderHighlight:extendSelection()
         -- pos0 and pos1 are in order within highlights
         new_pos0 = self.ui.document:compareXPointers(item1.pos0, item2_pos0) == 1 and item1.pos0 or item2_pos0
         new_pos1 = self.ui.document:compareXPointers(item1.pos1, item2_pos1) == 1 and item2_pos1 or item1.pos1
-        new_pboxes = self.document:getScreenBoxesFromPositions(new_pos0, new_pos1)
+        new_pboxes = self.document:getScreenBoxesFromPositions(new_pos0, new_pos1, true)
         -- true to draw
         new_text = self.ui.document:getTextFromXPointers(new_pos0, new_pos1, true)
     end
@@ -2786,7 +2780,6 @@ function ReaderHighlight:onHighlightPress(skip_tap_check)
             pos.y + pos.h / 2 - self._current_indicator_pos.h / 2
         )
     end
-    UIManager:setDirty(self.dialog, "ui", self._current_indicator_pos)
     return true
 end
 
@@ -2825,6 +2818,7 @@ function ReaderHighlight:onStartHighlightIndicator()
 end
 
 function ReaderHighlight:onStopHighlightIndicator(need_clear_selection)
+    if not self._current_indicator_pos then return false end
     -- If we're in select mode and user presses back, end the selection
     if self.select_mode and self.highlight_idx then
         self.select_mode = false
@@ -2835,19 +2829,17 @@ function ReaderHighlight:onStopHighlightIndicator(need_clear_selection)
         end
         self.highlight_idx = nil
     end
-    if self._current_indicator_pos then
-        local rect = self._current_indicator_pos
-        self._previous_indicator_pos = rect
-        self._start_indicator_highlight = false
-        self._current_indicator_pos = nil
-        self.view.highlight.indicator = nil
-        UIManager:setDirty(self.dialog, "ui", rect)
-        if need_clear_selection then
-            self:clear()
-        end
-        return true
+
+    local rect = self._current_indicator_pos
+    self._previous_indicator_pos = rect
+    self._start_indicator_highlight = false
+    self._current_indicator_pos = nil
+    self.view.highlight.indicator = nil
+    UIManager:setDirty(self.dialog, "ui", rect)
+    if need_clear_selection then
+        self:clear()
     end
-    return false
+    return true
 end
 
 function ReaderHighlight:onMoveHighlightIndicator(args)
