@@ -13,18 +13,22 @@ You can skip most of the following instructions if desired, and use our premade 
 
 To get and compile the source you must have:
 - `autoconf`: version > 2.64
+- `automake`
+- `awk`
 - `bash`: version >= 4.0
 - `cmake`: version >= 3.17.5
+- `find`
 - `gcc/g++` or `clang/clang++`: with C11 & C++17 support
 - `gettext`
 - `git`
+- `libtool`
 - `make`: version >= 4.1 (recommended: >= 4.4 for transparent `-j` / `-l` handling)
 - `meson`: version >= 1.2.0 on Linux, >= 1.8.3 on macOS
 - `nasm`
 - `ninja` (recommended: >= 1.13.2 for make job server support)
 - `patch`
-- `perl`: version >= 5
 - `pkg-config` or `pkgconf`
+- `python`: version >= 3.10
 - `unzip`
 - `wget`
 
@@ -32,17 +36,18 @@ Optional:
 - `7z`: for packing releases and the Android build assets
 - `ccache`: recommended for faster recompilation times
 - `luacheck`, `shellcheck` and `shfmt`: for linting the codebase with `./kodev check`
-- `SDL3`: for running the emulator / tests (if not installed, a version will automatically be built)
+- `luajit` (Linux only): to update Linux packages' metadata
+- `ffi-cdecl` or `luajit` + `tree-sitter >= 0.26.0` + `tree-sitter-c >= 0.24.0`: to generate FFI cdecls
+- `SDL3`: version >= 3.2.12, only the library, for running the emulator / tests (if not found, a version will automatically be built)
 
 ### Alpine Linux
 
 Install the prerequisites using apk:
 
 ```
-sudo apk add autoconf automake bash cmake coreutils curl diffutils \
-    findutils g++ gcc gettext-dev git grep gzip libtool linux-headers \
-    make meson nasm ninja-build patch perl pkgconf procps-ng sdl3 tar \
-    unzip wget
+sudo apk add autoconf automake bash cmake coreutils diffutils findutils \
+    g++ gcc gettext-dev git grep gzip libtool linux-headers make meson \
+    nasm ninja-build patch pkgconf procps-ng sdl3 tar unzip wget
 ```
 
 **Note:** don't forget to add `/usr/lib/ninja-build/bin` to `$PATH`
@@ -50,7 +55,7 @@ so the real ninja is used (and not the binary provided by samurai).
 
 Optional:
 ```
-sudo apk add 7zip ccache luacheck shellcheck shfmt
+sudo apk add 7zip ccache luacheck luajit shellcheck shfmt
 ```
 
 ### Arch Linux
@@ -59,12 +64,12 @@ Install the prerequisites using pacman:
 
 ```
 run0 pacman -S base-devel ca-certificates cmake gcc-libs git \
-    meson nasm ninja perl sdl3 unzip wget
+    meson nasm ninja sdl3 unzip wget
 ```
 
 Optional:
 ```
-run0 pacman -S 7zip ccache luacheck shellcheck shfmt
+run0 pacman -S 7zip ccache luacheck luajit shellcheck shfmt
 ```
 
 ### Debian/Ubuntu
@@ -72,35 +77,41 @@ run0 pacman -S 7zip ccache luacheck shellcheck shfmt
 Install the prerequisites using APT:
 
 ```
-sudo apt install autoconf automake build-essential ca-certificates cmake \
-    gcc-multilib gettext git libtool libtool-bin meson nasm \
-    ninja-build patch perl pkg-config unzip wget
+sudo apt install --no-install-recommends autoconf automake build-essential \
+    ca-certificates cmake gcc-multilib gettext git libtool libtool-bin meson \
+    nasm ninja-build patch pkg-config unzip wget
 ```
 
 To install SDL3, on recent enough distributions:
 ```
-sudo apt install libsdl3-0
+sudo apt install --no-install-recommends libsdl3-0
 ```
 
-For building SDL3 on distributions that don't provide it:
+For building SDL3 on distributions that don't provide a recent enough version:
 ```
 # Minimal Wayland support.
-sudo apt install libegl-dev libwayland-dev
+sudo apt install --no-install-recommends libegl-dev libwayland-dev libxkbcommon-dev
 # Minimal X11 support.
-sudo apt install libx11-dev libxext-dev
+sudo apt install --no-install-recommends libx11-dev libxcursor-dev libxext-dev libxi-dev \
+    libxrandr-dev libxss-dev libxtst-dev
 ```
 
 **Note:** Debian distributions might need `meson` to be installed from `bookworm-backports`
 because the version provided by the default repositories is too old:
 ```
-sudo apt install meson/bookworm-backports
+sudo apt install --no-install-recommends meson/bookworm-backports
 ```
 The bookworm-backports repository was already included on Linux Mint Debian Edition 6.
 Otherwise, follow full up-to-date instructions from here: https://wiki.debian.org/Backports.
 
 Optional:
 ```
-sudo apt install ccache lua-check p7zip-full shellcheck shfmt
+sudo apt install --no-install-recommends  ccache libluajit-5.1-dev lua-check luajit \
+    p7zip-full shellcheck shfmt
+```
+And to install GCC plugin support for your installed GCC version, e.g. for `gcc-11`:
+```
+sudo apt install --no-install-recommends gcc-11-plugin-dev
 ```
 
 ### Fedora/Red Hat
@@ -109,12 +120,12 @@ Install the prerequisites using DNF:
 
 ```
 sudo dnf install autoconf automake cmake gcc gcc-c++ gettext git libtool meson \
-    nasm ninja-build patch perl-FindBin procps-ng SDL3 unzip wget
+    nasm ninja-build patch procps-ng SDL3 unzip wget
 ```
 
 Optional:
 ```
-sudo dnf install ccache p7zip shellcheck shfmt
+sudo dnf install ccache gcc-plugin-devel luajit-devel p7zip shellcheck shfmt
 ```
 And for luacheck:
 ```
@@ -128,7 +139,8 @@ Install the prerequisites using [Homebrew](https://brew.sh/):
 
 ```
 brew install autoconf automake bash binutils cmake coreutils findutils \
-    gettext gnu-getopt libtool make meson nasm ninja pkg-config util-linux
+    gettext gnu-getopt libtool make meson nasm ninja pkgconf sdl3 \
+    util-linux
 ```
 
 You will also have to ensure Homebrew's findutils, gnu-getopt, make & util-linux are in your path, e.g., via
@@ -153,6 +165,26 @@ Ensure the [nix is installed](https://nixos.org/download/).
 Then simply run the included nix shell:
 ```
 nix-shell tools/shell.nix
+```
+
+### openSUSE
+
+Install the prerequisites using zypper:
+
+```
+sudo zypper install autoconf automake bash cmake find gcc gcc-32bit gcc-c++ gettext \
+    gawk git libSDL3-0 libtool make meson nasm ninja patch pkgconf unzip wget
+```
+
+Optional:
+
+```
+sudo zypper install 7zip ccache luajit-devel luajit-luacheck ShellCheck shfmt
+```
+
+And to install GCC plugin support for your installed GCC version, e.g. for `gcc15`:
+```
+sudo apt install gcc15-devel
 ```
 
 ## Getting the source

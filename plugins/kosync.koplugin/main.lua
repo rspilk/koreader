@@ -1,9 +1,11 @@
 local ConfirmBox = require("ui/widget/confirmbox")
+local DataStorage = require("datastorage")
 local Device = require("device")
 local Dispatcher = require("dispatcher")
 local Event = require("ui/event")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
+local LuaSettings = require("luasettings")
 local Math = require("optmath")
 local MultiInputDialog = require("ui/widget/multiinputdialog")
 local NetworkMgr = require("ui/network/manager")
@@ -12,20 +14,17 @@ local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local logger = require("logger")
 local md5 = require("ffi/sha2").md5
-local random = require("random")
 local time = require("ui/time")
 local util = require("util")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
-if G_reader_settings:hasNot("device_id") then
-    G_reader_settings:saveSetting("device_id", random.uuid())
-end
-
 local KOSync = WidgetContainer:extend{
     name = "kosync",
     is_doc_only = true,
     title = _("Register/login to KOReader server"),
+    settings_file = DataStorage:getSettingsDir() .. "/kosync.lua",
+    updated = nil,
 
     push_timestamp = nil,
     pull_timestamp = nil,
@@ -64,7 +63,22 @@ KOSync.default_settings = {
     sync_forward = SYNC_STRATEGY.PROMPT,
     sync_backward = SYNC_STRATEGY.DISABLE,
     checksum_method = CHECKSUM_METHOD.BINARY,
+    send_metadata = false,
 }
+
+function KOSync:loadSettings()
+    if not KOSync.settings_obj then
+        KOSync.settings_obj = LuaSettings:open(self.settings_file)
+    end
+    self.settings = KOSync.settings_obj:readSetting("settings", KOSync.default_settings)
+end
+
+function KOSync:onFlushSettings()
+    if self.updated then
+        KOSync.settings_obj:flush()
+        self.updated = nil
+    end
+end
 
 function KOSync:init()
     self.push_timestamp = 0
@@ -81,8 +95,7 @@ function KOSync:init()
         -- We do *NOT* want to make sure networking is up here, as the nagging would be extremely annoying; we're leaving that to the network activity check...
         self:updateProgress(false, false)
     end
-
-    self.settings = G_reader_settings:readSetting("kosync", self.default_settings)
+    self:loadSettings()
     self.device_id = G_reader_settings:readSetting("device_id")
 
     -- Disable auto-sync if beforeWifiAction was reset to "prompt" behind our back...
@@ -203,6 +216,7 @@ function KOSync:addToMainMenu(menu_items)
                         input = self.settings.custom_server or "https://",
                         callback = function(input)
                             self:setCustomServer(input)
+                            self.updated = true
                         end,
                     }
                 end,
@@ -233,6 +247,7 @@ function KOSync:addToMainMenu(menu_items)
                                         local hostname = dialog:getInputText()
                                         logger.dbg("KOSync: Setting custom hostname to:", hostname)
                                         self.settings.kosync_hostname = hostname ~= "" and hostname or nil
+                                        self.updated = true
                                         UIManager:close(dialog)
                                     end,
                                 },
@@ -253,6 +268,7 @@ function KOSync:addToMainMenu(menu_items)
                     if self.settings.userkey then
                         return function(menu)
                             self:logout(menu)
+                            self.updated = true
                         end
                     else
                         return function(menu)
@@ -268,6 +284,7 @@ function KOSync:addToMainMenu(menu_items)
                 help_text = _([[This may lead to nagging about toggling WiFi on document close and suspend/resume, depending on the device's connectivity.]]),
                 callback = function()
                     self:onKOSyncToggleAutoSync(nil, true)
+                    self.updated = true
                 end,
             },
             {
@@ -294,6 +311,7 @@ If set to 0, updating progress based on page turns will be disabled.]]),
                         callback = function(spin)
                             self:setPagesBeforeUpdate(spin.value)
                             if touchmenu_instance then touchmenu_instance:updateItems() end
+                            self.updated = true
                         end
                     }
                     UIManager:show(items)
@@ -316,6 +334,7 @@ If set to 0, updating progress based on page turns will be disabled.]]),
                                 end,
                                 callback = function()
                                     self:setSyncForward(SYNC_STRATEGY.SILENT)
+                                    self.updated = true
                                 end,
                             },
                             {
@@ -325,6 +344,7 @@ If set to 0, updating progress based on page turns will be disabled.]]),
                                 end,
                                 callback = function()
                                     self:setSyncForward(SYNC_STRATEGY.PROMPT)
+                                    self.updated = true
                                 end,
                             },
                             {
@@ -334,6 +354,7 @@ If set to 0, updating progress based on page turns will be disabled.]]),
                                 end,
                                 callback = function()
                                     self:setSyncForward(SYNC_STRATEGY.DISABLE)
+                                    self.updated = true
                                 end,
                             },
                         }
@@ -350,6 +371,7 @@ If set to 0, updating progress based on page turns will be disabled.]]),
                                 end,
                                 callback = function()
                                     self:setSyncBackward(SYNC_STRATEGY.SILENT)
+                                    self.updated = true
                                 end,
                             },
                             {
@@ -359,6 +381,7 @@ If set to 0, updating progress based on page turns will be disabled.]]),
                                 end,
                                 callback = function()
                                     self:setSyncBackward(SYNC_STRATEGY.PROMPT)
+                                    self.updated = true
                                 end,
                             },
                             {
@@ -368,6 +391,7 @@ If set to 0, updating progress based on page turns will be disabled.]]),
                                 end,
                                 callback = function()
                                     self:setSyncBackward(SYNC_STRATEGY.DISABLE)
+                                    self.updated = true
                                 end,
                             },
                         }
@@ -404,6 +428,7 @@ If set to 0, updating progress based on page turns will be disabled.]]),
                         end,
                         callback = function()
                             self:setChecksumMethod(CHECKSUM_METHOD.BINARY)
+                            self.updated = true
                         end,
                     },
                     {
@@ -413,9 +438,19 @@ If set to 0, updating progress based on page turns will be disabled.]]),
                         end,
                         callback = function()
                             self:setChecksumMethod(CHECKSUM_METHOD.FILENAME)
+                            self.updated = true
                         end,
                     },
                 }
+            },
+            {
+                text = _("Send document metadata"),
+                checked_func = function() return self.settings.send_metadata end,
+                help_text = _([[When enabled, document metadata (filename, title, and authors) will be sent along with progress sync requests. This data is ignored by the official sync server but may be used by custom sync servers.]]),
+                callback = function()
+                    self.settings.send_metadata = not self.settings.send_metadata
+                    self.updated = true
+                end,
             },
         }
     }
@@ -549,6 +584,7 @@ function KOSync:doRegister(username, password, menu)
         if menu then
             menu:updateItems()
         end
+        self.updated = true
         UIManager:show(InfoMessage:new{
             text = _("Registered to KOReader server."),
         })
@@ -585,6 +621,7 @@ function KOSync:doLogin(username, password, menu)
     elseif status then
         self.settings.username = username
         self.settings.userkey = userkey
+        self.updated = true
         if menu then
             menu:updateItems()
         end
@@ -636,13 +673,30 @@ function KOSync:getFileDigest()
 end
 
 function KOSync:getFileNameDigest()
+    local file_name = self:getFileName()
+    if not file_name then return end
+    return md5(file_name)
+end
+
+function KOSync:getFileName()
     local file = self.ui.document.file
     if not file then return end
 
     local file_path, file_name = util.splitFilePathName(file) -- luacheck: no unused
     if not file_name then return end
 
-    return md5(file_name)
+    return file_name
+end
+
+function KOSync:getMetadata()
+    if not self.settings.send_metadata then return end
+
+    local props = self.ui.doc_props
+    return {
+        filename = self:getFileName(),
+        title = props.display_title,
+        authors = props.authors,
+    }
 end
 
 function KOSync:syncToProgress(progress)
@@ -678,6 +732,7 @@ function KOSync:updateProgress(ensure_networking, interactive, on_suspend)
         service_spec = self.path .. "/api.json"
     }
     local doc_digest = self:getDocumentDigest()
+    local metadata = self:getMetadata()
     local progress = self:getLastProgress()
     local percentage = self:getLastPercent()
     local chosen_device_name = self.settings.kosync_hostname or Device.model
@@ -686,6 +741,7 @@ function KOSync:updateProgress(ensure_networking, interactive, on_suspend)
         self.settings.username,
         self.settings.userkey,
         doc_digest,
+        metadata,
         progress,
         percentage,
         chosen_device_name,
@@ -959,6 +1015,7 @@ function KOSync:onKOSyncToggleAutoSync(toggle, from_menu)
         return true
     end
     self.settings.auto_sync = not self.settings.auto_sync
+    self.updated = true
     self:registerEvents()
 
     if self.settings.auto_sync then

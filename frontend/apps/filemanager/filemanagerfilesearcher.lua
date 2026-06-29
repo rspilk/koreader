@@ -11,7 +11,6 @@ local InfoMessage = require("ui/widget/infomessage")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local InputDialog = require("ui/widget/inputdialog")
 local UIManager = require("ui/uimanager")
-local Utf8Proc = require("ffi/utf8proc")
 local filemanagerutil = require("apps/filemanager/filemanagerutil")
 local lfs = require("libs/libkoreader-lfs")
 local util = require("util")
@@ -26,18 +25,18 @@ local FileSearcher = InputContainer:extend{
 }
 
 function FileSearcher:init()
-    self:registerKeyEvents()
     if not self.ui.document then
         self.ui.menu:registerToMainMenu(self)
     end
 end
 
-function FileSearcher:registerKeyEvents()
-    if Device:hasKeyboard() then
-        self.key_events.ShowFileSearch = { { "Alt", "F" }, { "Ctrl", "F" } }
-        self.key_events.ShowFileSearchBlank = { { "Alt", "Shift", "F" }, { "Ctrl", "Shift", "F" }, event = "ShowFileSearch", args = "" }
-    end
-end
+-- function FileSearcher:registerKeyEvents()
+--     now handled by hotkeys.koplugin:
+--     onShowFileSearch = { { "Alt", "F" }, { "Ctrl", "F" } }
+--     if Device:hasKeyboard() then
+--         onShowFileSearchBlank = { { "Alt", "Shift", "F" }, { "Ctrl", "Shift", "F" } }
+--     end
+-- end
 
 function FileSearcher:addToMainMenu(menu_items)
     menu_items.file_search = {
@@ -181,7 +180,7 @@ function FileSearcher:getList()
     local search_string = FileSearcher.search_string
     if search_string ~= "*" then -- one * to show all files
         if not self.case_sensitive then
-            search_string = Utf8Proc.lowercase(util.fixUtf8(search_string, "?"))
+            search_string = util.stringLower(search_string)
         end
         -- replace '.' with '%.'
         search_string = search_string:gsub("%.","%%%.")
@@ -237,7 +236,7 @@ function FileSearcher:isFileMatch(filename, fullpath, search_string, is_file)
         return true
     end
     if not self.case_sensitive then
-        filename = Utf8Proc.lowercase(util.fixUtf8(filename, "?"))
+        filename = util.stringLower(filename)
     end
     if string.find(filename, search_string) then
         return true
@@ -345,9 +344,7 @@ function FileSearcher:onMenuSelect(item)
     else
         if item.is_file then
             if DocumentRegistry:hasProvider(item.path, nil, true) then
-                self.close_callback()
-                local FileManager = require("apps/filemanager/filemanager")
-                FileManager.openFile(self.ui, item.path)
+                filemanagerutil.openFile(self.ui, item.path, self.close_callback)
             end
         else
             self._manager.update_files = nil

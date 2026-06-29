@@ -12,6 +12,7 @@ OPTIONS:
     -e EPOCH, --epoch EPOCH      set contents timestamp to EPOCH
     -m ENTRY, --manifest ENTRY   add a manifest ENTRY to the release
     --manifest-transform SCRIPT  transform manifest using sed SCRIPT
+    --no-dereference             keep links
     -o OPTS, --options OPTS      forward options to compressor
 "
 
@@ -27,6 +28,24 @@ function reverse_entry() {
 }
 '
 
+# shellcheck disable=SC2016
+declare -r AWK_TAR_BLOCKLIST='
+BEGIN {
+    FS = "[: ]+"
+    ORS = ""
+    TAR_BS = 512
+    prev_offset = 0
+}
+{
+    if ($2)
+        print ($2 - prev_offset) * TAR_BS ","
+    prev_offset = $2
+}
+END {
+    print 0
+}
+'
+
 if [[ "${OSTYPE}" = darwin* ]]; then
     declare -r READLINK=greadlink
     declare -r TAR=gtar
@@ -35,7 +54,7 @@ else
     declare -r TAR=tar
 fi
 
-if ! opt=$(getopt -o '+de:hj:m:o:' --long 'debug,epoch:,help,jobs:,manifest:,manifest-transform:,options:' --name "$0" -- "$@"); then
+if ! opt=$(getopt -o '+de:hj:m:o:' --long 'debug,epoch:,help,jobs:,manifest:,manifest-transform:,no-dereference,options:' --name "$0" -- "$@"); then
     echo "${USAGE}"
     exit 1
 fi
@@ -47,6 +66,7 @@ epoch=''
 jobs=''
 manifest=''
 manifest_transform=''
+dereference=1
 options=()
 
 eval set -- "${opt}"
@@ -74,6 +94,9 @@ while [[ $# -gt 0 ]]; do
         --manifest-transform)
             manifest_transform="$2"
             shift
+            ;;
+        --no-dereference)
+            dereference=''
             ;;
         -o | --options)
             declare -a a="($2)"
@@ -113,7 +136,7 @@ fi
 
 # }}}
 
-if command -v pv >/dev/null; then
+if type -P pv >/dev/null; then
     write_to_file() {
         pv --interval=0.25 --bytes --timer --rate --output="$1"
     }
@@ -129,7 +152,7 @@ export LC_ALL=C
 # We need to use the full path to the executable to avoid
 # a weird issue when using the p7zip project pre-built
 # binary (`Can't load './7z.dll' (7z.so)...`).
-if ! sevenzip="$(which 7z)"; then
+if ! sevenzip="$(type -P 7z)"; then
     echo "ERROR: 7z executable not found!" 1>&2
     exit 2
 fi
@@ -150,7 +173,7 @@ fi
 rm -f "${tmpdir}/symlink"
 
 # Prefer `pigz` over `gzip` (faster).
-gzip="$(command -v pigz || command -v gzip)"
+gzip="$(type -P pigz || type -P gzip)"
 gzip_cmd=("${gzip}")
 
 # Jobs.
@@ -255,7 +278,8 @@ fi
 
 # Make a copy of everything so we can later patch timestamps and
 # fix permissions to ensure reproducibility.
-"${TAR}" --create --dereference --hard-dereference --no-recursion \
+"${TAR}" --create --no-recursion \
+    ${dereference:+--dereference --hard-dereference} \
     --verbatim-files-from --files-from="${tmpdir}/paths" |
     "${TAR}" --extract --directory="${tmpdir}/contents"
 
@@ -300,8 +324,23 @@ case "${format}" in
         ;;
     tar.xz)
         echo "Creating archive: ${output}"
-        "${tar_compress_cmd[@]}" |
-            xz -9 ${jobs:+--threads=${jobs}} "${options[@]}" |
+        # Note: we create one XZ block per TAR entry.
+        tarfile="${tmpdir}/release.tar"
+        tarindex="${tarfile}.index"
+        blocklist="${tmpdir}/release.blocklist"
+        # Create the initial uncompressed TAR file.
+        "${tar_compress_cmd[@]}" --file="${tarfile}"
+        # Find out where each entry starts.
+        "${TAR}" --block-number --list --file="${tarfile}" >"${tarindex}"
+        # Generate block list for XZ.
+        awk "${AWK_TAR_BLOCKLIST}" <"${tarindex}" >"${blocklist}"
+        # Create the final TAR.XZ file.
+        # NOTE: we set the block size to a big enough number to
+        # prevent xz from splitting an entry into multiple blocks.
+        xz -9 ${jobs:+--threads=${jobs}} \
+            --block-size=32M \
+            --block-list="$(cat "${blocklist}")" \
+            "${options[@]}" --stdout "${tarfile}" |
             write_to_file "${output}"
         ;;
     tar.zst)

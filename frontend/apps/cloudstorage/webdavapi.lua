@@ -53,6 +53,7 @@ function WebDavApi:listFolder(address, user, pass, folder_path, folder_mode)
     if webdav_url:sub(-1) ~= "/" then
         webdav_url = webdav_url .. "/"
     end
+    local webdav_url_path = self.trim_slashes(webdav_url:match("^https?://[^/]*(.*)$") or webdav_url)
 
     local sink = {}
     local data = [[<?xml version="1.0"?><a:propfind xmlns:a="DAV:"><a:prop><a:resourcetype/><a:getcontentlength/></a:prop></a:propfind>]]
@@ -92,15 +93,15 @@ function WebDavApi:listFolder(address, user, pass, folder_path, folder_mode)
             -- <d:href> is the path and filename of the entry.
             local item_fullpath = item:match("<[^:]*:href[^>]*>(.*)</[^:]*:href>")
             local item_name = ffiUtil.basename(util.htmlEntitiesToUtf8(util.urlDecode(item_fullpath)))
-            local is_current_dir = self.trim_slashes(item_fullpath) == path
+            local is_current_dir = self.trim_slashes(item_fullpath) == webdav_url_path
             local is_not_collection = item:find("<[^:]*:resourcetype%s*/>") or
-                                      item:find("<[^:]*:resourcetype></[^:]*:resourcetype>")
+                                      item:find("<[^:]*:resourcetype>%s*</[^:]*:resourcetype>")
             local item_path = path .. "/" .. item_name
 
             -- only available for files, not directories/collections
             local item_filesize = item:match("<[^:]*:getcontentlength[^>]*>(%d+)</[^:]*:getcontentlength>")
 
-            if item:find("<[^:]*:collection[^<]*/>") then
+            if item:find("<[^:]*:collection[^<]*/>") or item:find("<[^:]*:collection>%s*</[^:]*:collection>") then
                 item_name = item_name .. "/"
                 if not is_current_dir then
                     table.insert(webdav_list, {

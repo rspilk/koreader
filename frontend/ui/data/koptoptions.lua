@@ -205,7 +205,7 @@ Will rotate up to specified value.]]),
                 enabled_func = function(configurable)
                     return optionsutil.enableIfEquals(configurable, "text_wrap", 0)
                 end,
-                toggle = {_("full"), _("width"), _("height")},
+                toggle = {C_("Fit mode", "full"), C_("Fit mode", "width"), C_("Fit mode", "height")},
                 alternate = false,
                 values = {2, 1, 0},
                 default_value = 1,
@@ -342,7 +342,7 @@ left to right or reverse, top to bottom or reverse.]]),
             {
                 name = "page_scroll",
                 name_text = _("View Mode"),
-                toggle = {_("page"), _("continuous")},
+                toggle = {C_("View mode", "page"), C_("View mode", "continuous")},
                 values = {0, 1},
                 default_value = 1,
                 event = "SetScrollMode",
@@ -437,8 +437,8 @@ The first option ("auto") tries to automatically align reflowed text as it is in
             {
                 name = "font_fine_tune",
                 name_text = _("Font Size"),
-                toggle = Device:isTouchDevice() and {_("decrease"), _("increase")} or nil,
-                item_text = not Device:isTouchDevice() and {_("decrease"), _("increase")} or nil,
+                toggle = Device:isTouchDevice() and {C_("Font size", "decrease"), C_("Font size", "increase")} or nil,
+                item_text = not Device:isTouchDevice() and {C_("Font size", "decrease"), C_("Font size", "increase")} or nil,
                 values = {-0.05, 0.05},
                 default_value = 0.05,
                 event = "FineTuningFontSize",
@@ -472,7 +472,7 @@ The first option ("auto") tries to automatically align reflowed text as it is in
                 name = "text_wrap",
                 --- @translators Reflow text.
                 name_text = _("Reflow"),
-                toggle = {_("off"), _("on")},
+                toggle = {C_("Reflow", "off"), C_("Reflow", "on")},
                 values = {0, 1},
                 default_value = G_defaults:readSetting("DKOPTREADER_CONFIG_TEXT_WRAP"),
                 event = "ReflowUpdated",
@@ -507,19 +507,78 @@ Some of the other settings are only available when reflow mode is enabled.]]),
                 },
             },
             {
+                name = "saturation",
+                name_text = _("Saturation"),
+                buttonprogress = true,
+                values = {0.2, 0.5, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0},
+                default_pos = 3,
+                default_value = G_defaults:readSetting("DKOPTREADER_CONFIG_SATURATION"),
+                event = "SaturationUpdate",
+                args =   {0.2, 0.5, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0},
+                labels = {0.2, 0.5, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0},
+                show = Device:hasColorScreen(),
+                enabled_func = function()
+                    return Device.screen:isColorEnabled()
+                end,
+                name_text_hold_callback = optionsutil.showValues,
+                more_options = true,
+                more_options_param = {
+                    value_step = 0.1, value_hold_step = 0.2,
+                    value_min = 0.2, value_max = 2.0,
+                    precision = "%.1f",
+                },
+                help_text = _([[Adjust color saturation for rendered pages.
+Lower values desaturate colors, 1.0 keeps original colors, and higher values increase color intensity.]]),
+            },
+            {
+                name = "white_threshold",
+                name_text = _("White Threshold"),
+                buttonprogress = true,
+                values = {255, 224, 192, 160, 128, 96, 64, 32},
+                default_pos = 1,
+                default_value = G_defaults:readSetting("DKOPTREADER_CONFIG_WHITE_THRESHOLD"),
+                event = "WhiteThresholdUpdate",
+                args =   {255, 224, 192, 160, 128, 96, 64, 32},
+                labels = {255, 224, 192, 160, 128, 96, 64, 32},
+                name_text_hold_callback = optionsutil.showValues,
+                more_options = true,
+                more_options_param = {
+                    value_step = 1, value_hold_step = 5,
+                    value_min = 0, value_max = 255,
+                },
+                help_text = _([[Render everything above the threshold white.]]),
+            },
+            {
                 name = "page_opt",
                 name_text = _("Dewatermark"),
-                toggle = {_("off"), _("on")},
+                toggle = {C_("Dewatermark", "off"), C_("Dewatermark", "on")},
                 values = {0, 1},
                 default_value = 0,
+                enabled_func = function(configurable)
+                    return optionsutil.enableIfEquals(configurable, "white_threshold", 255)
+                end,
                 name_text_hold_callback = optionsutil.showValues,
                 help_text = _([[Remove watermarks from the rendered document.
 This can also be used to remove some gray background or to convert a grayscale or color document to black & white and get more contrast for easier reading.]]),
             },
             {
+                name = "background_cleanup",
+                name_text = _("Background Cleanup"),
+                toggle = {C_("Background Cleanup", "off"), C_("Background Cleanup", "on")},
+                values = {0, 1},
+                default_value = 0,
+                args = {0, 1},
+                show_func = function(configurable, document)
+                    return document.is_pdf == true
+                end,
+                name_text_hold_callback = optionsutil.showValues,
+                help_text = _([[Render the essentials in black and white, ignoring extra data for better contrast and faster rendering.
+Useful for Internet Archive PDF documents.]]),
+            },
+            {
                 name = "hw_dithering",
                 name_text = _("Dithering"),
-                toggle = {_("off"), _("on")},
+                toggle = {C_("Dithering", "off"), C_("Dithering", "on")},
                 values = {0, 1},
                 default_value = 0,
                 advanced = true,
@@ -532,7 +591,7 @@ This can also be used to remove some gray background or to convert a grayscale o
             {
                 name = "sw_dithering",
                 name_text = _("Dithering"),
-                toggle = {_("off"), _("on")},
+                toggle = {C_("Dithering", "off"), C_("Dithering", "on")},
                 values = {0, 1},
                 default_value = 0,
                 advanced = true,
@@ -578,7 +637,7 @@ This can also be used to remove some gray background or to convert a grayscale o
                 name = "forced_ocr",
                 --- @translators If OCR is unclear, please see https://en.wikipedia.org/wiki/Optical_character_recognition
                 name_text = _("Forced OCR"),
-                toggle = {_("off"), _("on")},
+                toggle = {C_("Forced OCR", "off"), C_("Forced OCR", "on")},
                 values = {0, 1},
                 default_value = 0,
                 advanced = true,
@@ -608,7 +667,7 @@ This can also be used to remove some gray background or to convert a grayscale o
                 name = "defect_size",
                 --- @translators The maximum size of a dust or ink speckle to be ignored instead of being considered a character.
                 name_text = _("Reflow Speckle Ignore Size"),
-                toggle = {_("small"), _("medium"), _("large")},
+                toggle = {C_("Reflow speckle ignore size", "small"), C_("Reflow speckle ignore size", "medium"), C_("Reflow speckle ignore size", "large")},
                 values = {1.0, 3.0, 5.0},
                 default_value = G_defaults:readSetting("DKOPTREADER_CONFIG_DEFECT_SIZE"),
                 event = "DefectSizeUpdate",
@@ -621,7 +680,7 @@ This can also be used to remove some gray background or to convert a grayscale o
             {
                 name = "detect_indent",
                 name_text = _("Indentation"),
-                toggle = {_("off"), _("on")},
+                toggle = {C_("Indentation", "off"), C_("Indentation", "on")},
                 values = {0, 1},
                 default_value = G_defaults:readSetting("DKOPTREADER_CONFIG_DETECT_INDENT"),
                 show = false, -- does not work
@@ -629,6 +688,16 @@ This can also be used to remove some gray background or to convert a grayscale o
                     return optionsutil.enableIfEquals(configurable, "text_wrap", 1)
                 end,
                 name_text_hold_callback = optionsutil.showValues,
+            },
+            {
+                name = "nightmode_document",
+                name_text = _("Invert Document"),
+                toggle = {_("off"), _("on")},
+                values = {0, 1},
+                default_value = 0,
+                show_func = function() return Device.screen.night_mode end,
+                name_text_hold_callback = optionsutil.showValues,
+                help_text = _([[Invert document in night mode. Useful for image-heavy documents such as comics or manga.]]),
             },
             {
                 name = "max_columns",

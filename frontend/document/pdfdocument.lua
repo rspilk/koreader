@@ -293,6 +293,19 @@ function PdfDocument:updateHighlightContents(pageno, item, contents)
     page:close()
 end
 
+function PdfDocument:getEmbeddedAnnotations()
+    local annotations = {}
+    for pageno = 1, self.info.number_of_pages do
+        local page = self._document:openPage(pageno)
+        local page_annots = page:getEmbeddedAnnotations()
+        if page_annots then
+            annotations[pageno] = page_annots
+        end
+        page:close()
+    end
+    return next(annotations) and annotations
+end
+
 function PdfDocument:writeDocument()
     logger.info("writing document to", self.file)
     self._document:writeDocument(self.file)
@@ -344,16 +357,16 @@ function PdfDocument:findAllText(pattern, case_insensitive, nb_context_words, ma
     return self.koptinterface:findAllText(self, pattern, case_insensitive, nb_context_words, max_hits)
 end
 
-function PdfDocument:renderPage(pageno, rect, zoom, rotation, gamma, hinting)
-    return self.koptinterface:renderPage(self, pageno, rect, zoom, rotation, gamma, hinting)
+function PdfDocument:renderPage(pageno, rect, zoom, rotation, gamma, saturation, hinting)
+    return self.koptinterface:renderPage(self, pageno, rect, zoom, rotation, gamma, saturation, hinting)
 end
 
-function PdfDocument:hintPage(pageno, zoom, rotation, gamma)
-    return self.koptinterface:hintPage(self, pageno, zoom, rotation, gamma)
+function PdfDocument:hintPage(pageno, zoom, rotation, gamma, saturation)
+    return self.koptinterface:hintPage(self, pageno, zoom, rotation, gamma, saturation)
 end
 
-function PdfDocument:drawPage(target, x, y, rect, pageno, zoom, rotation, gamma)
-    return self.koptinterface:drawPage(self, target, x, y, rect, pageno, zoom, rotation, gamma)
+function PdfDocument:drawPage(target, x, y, rect, pageno, zoom, rotation, gamma, saturation)
+    return self.koptinterface:drawPage(self, target, x, y, rect, pageno, zoom, rotation, gamma, saturation)
 end
 
 function PdfDocument:register(registry)

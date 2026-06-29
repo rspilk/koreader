@@ -33,11 +33,13 @@ local KoptOptions = require("ui/data/koptoptions")
 local Device = require("device")
 local Event = require("ui/event")
 local FileManager = require("apps/filemanager/filemanager")
+local Key = require("device/key")
 local Notification = require("ui/widget/notification")
 local ReaderDictionary = require("apps/reader/modules/readerdictionary")
 local ReaderFooter = require("apps/reader/modules/readerfooter")
 local ReaderHighlight = require("apps/reader/modules/readerhighlight")
 local ReaderTypography = require("apps/reader/modules/readertypography")
+local ReaderView = require("apps/reader/modules/readerview")
 local ReaderZooming = require("apps/reader/modules/readerzooming")
 local Screen = Device.screen
 local UIManager = require("ui/uimanager")
@@ -54,7 +56,7 @@ local Dispatcher = {
 -- See above for description.
 local settingsList = {
     -- General
-    gesture_overview = {category="none", event="ShowGestureOverview", title=_("Gesture overview"), general=true},
+    gesture_overview = {category="none", event="ShowGestureOverview", title=_("Gesture overview"), general=true, condition=Device:isTouchDevice()},
     filemanager = {category="none", event="Home", title=_("File browser"), general=true},
     open_previous_document = {category="none", event="OpenLastDoc", title=_("Open previous document"), general=true},
     history = {category="none", event="ShowHist", title=_("History"), general=true},
@@ -62,6 +64,7 @@ local settingsList = {
     favorites = {category="none", event="ShowColl", title=_("Favorites"), general=true},
     collections = {category="none", event="ShowCollList", title=_("Collections"), general=true},
     collections_search = {category="none", event="ShowCollectionsSearchDialog", title=_("Collections search"), general=true},
+    book_metadata_archive = {category="none", event="ShowBookMetadataArchive", title=_("Book metadata archive"), general=true},
     bookmark_browser = {category="none", event="ShowBookmarkBrowser", title=_("Bookmark browser"), general=true, separator=true},
     ----
     dictionary_lookup = {category="none", event="ShowDictionaryLookup", title=_("Dictionary lookup"), general=true},
@@ -121,7 +124,7 @@ local settingsList = {
     set_frontlight = {category="absolutenumber", event="SetFlIntensity", min=0, max=Device:getPowerDevice().fl_max, title=_("Set frontlight brightness"), screen=true, condition=Device:hasFrontlight()},
     increase_frontlight = {category="incrementalnumber", event="IncreaseFlIntensity", min=1, max=Device:getPowerDevice().fl_max, title=_("Increase frontlight brightness"), screen=true, condition=Device:hasFrontlight()},
     decrease_frontlight = {category="incrementalnumber", event="DecreaseFlIntensity", min=1, max=Device:getPowerDevice().fl_max, title=_("Decrease frontlight brightness"), screen=true, condition=Device:hasFrontlight()},
-    set_frontlight_warmth = {category="absolutenumber", event="SetFlWarmth", min=0, max=100, title=_("Set frontlight warmth"), screen=true, condition=Device:hasNaturalLight()},
+    set_frontlight_warmth = {category="absolutenumber", event="SetFlWarmth", min=1, max=Device:getPowerDevice().fl_max, title=_("Set frontlight warmth"), screen=true, condition=Device:hasNaturalLight()},
     increase_frontlight_warmth = {category="incrementalnumber", event="IncreaseFlWarmth", min=1, max=Device:getPowerDevice().fl_warmth_max, title=_("Increase frontlight warmth"), screen=true, condition=Device:hasNaturalLight()},
     decrease_frontlight_warmth = {category="incrementalnumber", event="DecreaseFlWarmth", min=1, max=Device:getPowerDevice().fl_warmth_max, title=_("Decrease frontlight warmth"), screen=true, condition=Device:hasNaturalLight(), separator=true},
     night_mode = {category="none", event="ToggleNightMode", title=_("Toggle night mode"), screen=true},
@@ -143,15 +146,16 @@ local settingsList = {
     set_display_mode = {category="string", event="SetDisplayMode", title=_("Set display mode"), args_func=FileManager.getDisplayModeActions, filemanager=true},
     set_sort_by = {category="string", event="SetSortBy", title=_("Sort by"), args_func=FileManager.getSortByActions, filemanager=true},
     set_reverse_sorting = {category="string", event="SetReverseSorting", title=_("Reverse sorting"), args={true, false}, toggle={_("on"), _("off")}, filemanager=true},
-    set_mixed_sorting = {category="string", event="SetMixedSorting", title=_("Folders and files mixed"), args={true, false}, toggle={_("on"), _("off")}, filemanager=true, separator=true},
+    set_mixed_sorting = {category="string", event="SetMixedSorting", title=_("Folders and files mixed"), args={true, false}, toggle={_("on"), _("off")}, filemanager=true},
+    set_flat_view = {category="string", event="SetFlatView", title=_("Show all files from subfolders"), args={true, false}, toggle={_("on"), _("off")}, filemanager=true, separator=true},
     ----
     show_plus_menu = {category="none", event="ShowPlusMenu", title=_("Show plus menu"), filemanager=true},
     toggle_select_mode = {category="none", event="ToggleSelectMode", title=_("Toggle select mode"), filemanager=true},
     refresh_content = {category="none", event="RefreshContent", title=_("Refresh content"), filemanager=true},
-    folder_shortcuts = {category="none", event="ShowFolderShortcutsDialog", title=_("Folder shortcuts"), filemanager=true},
     file_search = {category="none", event="ShowFileSearch", title=_("File search"), filemanager=true},
     file_search_results = {category="none", event="ShowSearchResults", title=_("Last file search results"), filemanager=true},
     ----
+    folder_shortcuts = {category="none", event="ShowFolderShortcutsDialog", title=_("Folder shortcuts"), filemanager=true},
     folder_up = {category="none", event="FolderUp", title=_("Folder up"), filemanager=true},
     fm_go_to = {category="none", event="ShowGotoDialog", title=_("Go to page"), filemanager=true},
     fm_back = {category="none", event="Back", title=_("Back"), filemanager=true, separator=true},
@@ -216,16 +220,21 @@ local settingsList = {
     toggle_handmade_toc = {category="none", event="ToggleHandmadeToc", title=_("Toggle custom TOC"), reader=true, condition=Device:isTouchDevice() or (Device:hasDPad() and Device:useDPadAsActionKeys())},
     toggle_handmade_flows = {category="none", event="ToggleHandmadeFlows", title=_("Toggle custom hidden flows"), reader=true, separator=true, condition=Device:isTouchDevice() or (Device:hasDPad() and Device:useDPadAsActionKeys())},
     ----
+    text_selection = {category="none", event="StartHighlightIndicator", title=_("Toggle text selection mode"), reader=true, condition=Device:hasKeyboard()},
     set_highlight_action = {category="string", event="SetHighlightAction", title=_("Set highlight action"), args_func=ReaderHighlight.getHighlightActions, reader=true},
     cycle_highlight_action = {category="none", event="CycleHighlightAction", title=_("Cycle highlight action"), reader=true},
     cycle_highlight_style = {category="none", event="CycleHighlightStyle", title=_("Cycle highlight style"), reader=true, separator=true},
+    ----
+    set_overlap_style = {category="string", event="SetOverlapStyle", title=_("Set page overlap style"), args_func=ReaderView.getOverlapStyles, reader=true},
+    cycle_overlap_style = {category="none", event="CycleOverlapStyle", title=_("Cycle page overlap style"), reader=true, separator=true},
     ----
     flush_settings = {category="none", event="FlushSettings", arg=true, title=_("Save book metadata"), reader=true, separator=true},
     ----
     export_annotations = {category="none", event="ExportAnnotations", title=_("Export annotations"), reader=true},
 
     -- Reflowable documents
-    set_typography_lang = {category="string", event="SetTypographyLanguage", title=_("Set typography language"), args_func=ReaderTypography.getLangTags, rolling=true, separator=true},
+    set_typography_lang = {category="string", event="SetTypographyLanguage", title=_("Set typography language"), args_func=ReaderTypography.getLangTags, rolling=true},
+    toggle_hanging_punctuation = {category="none", event="ToggleFloatingPunctuation", title=_("Toggle hanging punctuation"), rolling=true, separator=true},
     set_font = {category="string", event="SetFont", title=_("Font"), rolling=true, args_func=require("fontlist").getFontArgFunc,},
     increase_font = {category="incrementalnumber", event="IncreaseFontSize", min=0.5, max=255, step=0.5, title=_("Increase font size"), rolling=true},
     decrease_font = {category="incrementalnumber", event="DecreaseFontSize", min=0.5, max=255, step=0.5, title=_("Decrease font size"), rolling=true},
@@ -299,6 +308,7 @@ local settingsList = {
     kopt_forced_ocr = {category="configurable", paging=true},
     kopt_writing_direction = {category="configurable", paging=true},
     kopt_defect_size = {category="string", paging=true}, -- not shown in the bottom menu
+    kopt_nightmode_document = {category="configurable", paging=true},
     kopt_max_columns = {category="configurable", paging=true},
     kopt_auto_straighten = {category="absolutenumber", paging=true},
 
@@ -316,6 +326,7 @@ local dispatcher_menu_order = {
     "favorites",
     "collections",
     "collections_search",
+    "book_metadata_archive",
     "bookmark_browser",
     ----
     "dictionary_lookup",
@@ -399,14 +410,15 @@ local dispatcher_menu_order = {
     "set_sort_by",
     "set_reverse_sorting",
     "set_mixed_sorting",
+    "set_flat_view",
     ----
     "show_plus_menu",
     "toggle_select_mode",
     "refresh_content",
-    "folder_shortcuts",
     "file_search",
     "file_search_results",
     ----
+    "folder_shortcuts",
     "folder_up",
     "fm_go_to",
     "fm_back",
@@ -471,9 +483,13 @@ local dispatcher_menu_order = {
     "toggle_handmade_toc",
     "toggle_handmade_flows",
     ----
+    "text_selection",
     "set_highlight_action",
     "cycle_highlight_action",
     "cycle_highlight_style",
+    ----
+    "set_overlap_style",
+    "cycle_overlap_style",
     ----
     "flush_settings",
     ----
@@ -481,6 +497,7 @@ local dispatcher_menu_order = {
 
     -- Reflowable documents
     "set_typography_lang",
+    "toggle_hanging_punctuation",
     ----
     "set_font",
     "increase_font",
@@ -551,6 +568,7 @@ local dispatcher_menu_order = {
     "kopt_forced_ocr",
     "kopt_writing_direction",
     "kopt_defect_size",
+    "kopt_nightmode_document",
     "kopt_max_columns",
     "kopt_auto_straighten",
 }
@@ -783,6 +801,7 @@ function Dispatcher._removeFromOrder(location, settings, item)
         end
     end
     util.tableRemoveValue(actions, "settings", "quickmenu_separators", item)
+    util.tableRemoveValue(actions, "settings", "quickmenu_action_names", item)
 end
 
 -- Get a textual representation of the enabled actions to display in a menu item.
@@ -1085,7 +1104,7 @@ function Dispatcher:addSubMenu(caller, menu, location, settings)
                             caller.updated = true
                         end
                     end
-                    if touchmenu_instance then touchmenu_instance:updateItems() end
+                    touchmenu_instance:updateItems()
                 end
             end,
             sub_item_table = submenu,
@@ -1100,7 +1119,7 @@ function Dispatcher:addSubMenu(caller, menu, location, settings)
         enabled_func = function()
             return location[settings] and Dispatcher:_itemsCount(location[settings]) > 1 or false
         end,
-        callback = function(touchmenu_instance)
+        callback = function()
             Dispatcher._sortActions(caller, location[settings])
         end,
         keep_menu_open = true,
@@ -1186,6 +1205,82 @@ function Dispatcher:addSubMenu(caller, menu, location, settings)
             end
         end,
     })
+    table.insert(menu, {
+        text = _("Rename QuickMenu actions"),
+        enabled_func = function()
+            return util.tableGetValue(location[settings], "settings", "show_as_quickmenu") or false
+        end,
+        checked_func = function()
+            return util.tableGetValue(location[settings], "settings", "quickmenu_action_names")
+        end,
+        check_callback_updates_menu = true,
+        callback = function(touchmenu_instance)
+            local function rename_update_func()
+                caller.updated = true
+                touchmenu_instance:updateItems()
+            end
+            Dispatcher.renameQuickMenuActions(location[settings], rename_update_func)
+        end,
+        hold_callback = function(touchmenu_instance) -- reset all custom names
+            util.tableRemoveValue(location[settings], "settings", "quickmenu_action_names")
+            caller.updated = true
+            touchmenu_instance:updateItems()
+        end,
+    })
+end
+
+function Dispatcher.renameQuickMenuActions(actions, rename_update_func)
+    local rename_callback, rename_hold_callback
+    rename_callback = function(action, quickmenu)
+        local InputDialog = require("ui/widget/inputdialog")
+        local name_input
+        name_input = InputDialog:new{
+            title = _("Enter action name"),
+            description = T(_("Action: %1"), action.text),
+            input = util.tableGetValue(actions, "settings", "quickmenu_action_names", action.key) or action.text,
+            buttons = {{
+                {
+                    text = _("Cancel"),
+                    id = "close",
+                    callback = function()
+                        UIManager:close(name_input)
+                    end,
+                },
+                {
+                    text = _("Default"),
+                    callback = function()
+                        name_input:setInputText(action.text, nil, false)
+                    end,
+                },
+                {
+                    text = _("Save"),
+                    callback = function()
+                        local new_name = name_input:getInputText()
+                        if new_name == "" or new_name == action.text then -- reset custom name
+                            util.tableRemoveValue(actions, "settings", "quickmenu_action_names", action.key)
+                        else
+                            util.tableSetValue(actions, new_name, "settings", "quickmenu_action_names", action.key)
+                        end
+                        UIManager:close(name_input)
+                        UIManager:close(quickmenu)
+                        rename_update_func()
+                        Dispatcher._showAsMenu(actions, nil, rename_callback, rename_hold_callback)
+                    end,
+                },
+            }},
+        }
+        UIManager:show(name_input)
+        name_input:onShowKeyboard()
+    end
+    rename_hold_callback = function(action, quickmenu) -- reset custom name
+        if util.tableGetValue(actions, "settings", "quickmenu_action_names", action.key) then
+            util.tableRemoveValue(actions, "settings", "quickmenu_action_names", action.key)
+            UIManager:close(quickmenu)
+            rename_update_func()
+            Dispatcher._showAsMenu(actions, nil, rename_callback, rename_hold_callback)
+        end
+    end
+    Dispatcher._showAsMenu(actions, nil, rename_callback, rename_hold_callback)
 end
 
 function Dispatcher:isActionEnabled(action)
@@ -1204,7 +1299,7 @@ function Dispatcher:isActionEnabled(action)
     return not disabled
 end
 
-function Dispatcher._showAsMenu(settings, exec_props)
+function Dispatcher._showAsMenu(settings, exec_props, rename_callback, rename_hold_callback)
     local title = settings.settings.name
     local keep_open_on_apply = settings.settings.keep_open_on_apply
     local display_list = Dispatcher.getDisplayList(settings)
@@ -1223,22 +1318,34 @@ function Dispatcher._showAsMenu(settings, exec_props)
         }})
     end
     for _, v in ipairs(display_list) do
+        local text = util.tableGetValue(settings, "settings", "quickmenu_action_names", v.key) -- custom name
+        if text and rename_callback then -- rename mode
+            text = "\u{F040} " .. text -- "pen" symbol
+        end
         table.insert(buttons, {{
-            text = v.text,
-            enabled = Dispatcher:isActionEnabled(settingsList[v.key]),
+            text = text or v.text,
+            enabled = rename_callback ~= nil or Dispatcher:isActionEnabled(settingsList[v.key]),
             menu_style = true,
             callback = function()
-                UIManager:close(quickmenu)
-                Dispatcher:execute({[v.key] = settings[v.key]})
-                if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input") then
-                    quickmenu:setTitle(title)
-                    UIManager:show(quickmenu)
+                if rename_callback then
+                    rename_callback(v, quickmenu)
+                else
+                    UIManager:close(quickmenu)
+                    Dispatcher:execute({[v.key] = settings[v.key]})
+                    if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input") then
+                        quickmenu:setTitle(title)
+                        UIManager:show(quickmenu)
+                    end
                 end
             end,
             hold_callback = function()
-                if v.key:sub(1, 13) == "profile_exec_" then
-                    UIManager:close(quickmenu)
-                    UIManager:sendEvent(Event:new(settingsList[v.key].event, settingsList[v.key].arg, { qm_show = true }))
+                if rename_hold_callback then
+                    rename_hold_callback(v, quickmenu)
+                else
+                    if v.key:sub(1, 13) == "profile_exec_" then
+                        UIManager:close(quickmenu)
+                        UIManager:sendEvent(Event:new(settingsList[v.key].event, settingsList[v.key].arg, { qm_show = true }))
+                    end
                 end
             end,
         }})
@@ -1317,6 +1424,10 @@ function Dispatcher:execute(settings, exec_props)
                 -- the event can accept a gesture object or a number
                 arg = v ~= 0 and v or gesture or 0
                 UIManager:sendEvent(Event:new(event, arg))
+            elseif category == "key" then
+                local key = Key:new(arg, {})
+                UIManager:sendEvent(Event:new("KeyPress", key))
+                UIManager:sendEvent(Event:new("KeyRelease", key))
             end
         end
     end
